@@ -1,0 +1,331 @@
+//go:build ignore
+
+package main
+
+import (
+	"archive/tar"
+	"compress/gzip"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"github.com/klauspost/compress/zstd"
+)
+
+const (
+	opusVersion = "1.5.2"
+	opusURL     = "https://downloads.xiph.org/releases/opus/opus-" + opusVersion + ".tar.gz"
+	vendorDir   = "deps/opus"
+
+	// MSYS2 MinGW64 opus package - pre-built binaries
+	msys2OpusURL = "https://mirror.msys2.org/mingw/mingw64/mingw-w64-x86_64-opus-1.5.2-1-any.pkg.tar.zst"
+
+	// System-wide install location on Windows
+	systemInstallDir = "C:\\opus"
+)
+
+func main() {
+	if err := build(); err != nil {
+		fatal("Build failed: %v", err)
+	}
+	fmt.Println("✓ Build successful!")
+}
+
+func build() error {
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("this build script currently only supports Windows")
+	}
+
+	// Check if already installed system-wide
+	systemLibPath := filepath.Join(systemInstallDir, "lib", "libopus.a")
+	if fileExists(systemLibPath) {
+		fmt.Printf("✓ libopus already installed at %s\n", systemInstallDir)
+		fmt.Printf("  Make sure %s is in your PATH\n", filepath.Join(systemInstallDir, "bin"))
+		return nil
+	}
+
+	// Download and extract
+	fmt.Println("Downloading opus from MSYS2...")
+	tarPath := filepath.Join(vendorDir, "opus.tar.zst")
+	os.MkdirAll(vendorDir, 0755)
+
+	if err := downloadFile(msys2OpusURL, tarPath); err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+
+	fmt.Println("Extracting...")
+	extractDir := filepath.Join(vendorDir, "extracted")
+	if err := extractTarZst(tarPath, extractDir); err != nil {
+		return err
+	}
+	defer os.RemoveAll(extractDir)
+
+	// Copy files to system location
+	fmt.Printf("Installing to %s (requires admin privileges)...\n", systemInstallDir)
+
+	// The MSYS2 package extracts to mingw64/* structure
+	msys2Root := filepath.Join(extractDir, "mingw64")
+
+	if err := copyDir(filepath.Join(msys2Root, "lib"), filepath.Join(systemInstallDir, "lib")); err != nil {
+		return fmt.Errorf("failed to copy lib: %w", err)
+	}
+
+	if err := copyDir(filepath.Join(msys2Root, "include"), filepath.Join(systemInstallDir, "include")); err != nil {
+		return fmt.Errorf("failed to copy include: %w", err)
+	}
+
+	if err := copyDir(filepath.Join(msys2Root, "bin"), filepath.Join(systemInstallDir, "bin")); err != nil {
+		return fmt.Errorf("failed to copy bin: %w", err)
+	}
+
+	fmt.Println("✓ Installation successful!")
+
+	// Add to PATH
+	binPath := filepath.Join(systemInstallDir, "bin")
+	fmt.Println("Adding to system PATH...")
+	if err := addToSystemPath(binPath); err != nil {
+		fmt.Printf("⚠ Warning: Could not add to PATH automatically: %v\n", err)
+		fmt.Printf("Please manually add to PATH: %s\n", binPath)
+	} else {
+		fmt.Println("✓ Added to system PATH")
+		fmt.Println("  (Restart your terminal/IDE for PATH changes to take effect)")
+	}
+
+	fmt.Printf("\nInstallation locations:\n")
+	fmt.Printf("  Libraries: %s\n", filepath.Join(systemInstallDir, "lib"))
+	fmt.Printf("  Headers: %s\n", filepath.Join(systemInstallDir, "include"))
+	fmt.Printf("  Binaries: %s\n", binPath)
+
+	return nil
+}
+
+func extractTarZst(tarPath, dstDir string) error {
+	file, err := os.Open(tarPath)
+	if err != nil {
+			return err
+	}
+	defer file.Close()
+
+	// Decompress zstd
+	d, err := zstd.NewReader(file)
+	if err != nil {
+			return err
+	}
+	defer d.Close()
+
+	// Extract tar
+	tr := tar.NewReader(d)
+	for {
+			header, err := tr.Next()
+			if err == io.EOF {
+					break
+			}
+			if err != nil {
+					return err
+			}
+
+			target := filepath.Join(dstDir, header.Name)
+			switch header.Typeflag {
+			case tar.TypeDir:
+					os.MkdirAll(target, 0755)
+			case tar.TypeReg:
+					os.MkdirAll(filepath.Dir(target), 0755)
+					f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+					if err != nil {
+							return err
+					}
+					io.Copy(f, tr)
+					f.Close()
+			}
+	}
+	return nil
+}
+
+func extractTarGz(tarPath, dstDir string) error {
+	file, err := os.Open(tarPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	gzr, err := gzip.NewReader(file)
+	if err != nil {
+		return err
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		target := filepath.Join(dstDir, header.Name)
+		switch header.Typeflag {
+		case tar.TypeDir:
+			os.MkdirAll(target, 0755)
+		case tar.TypeReg:
+			os.MkdirAll(filepath.Dir(target), 0755)
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			io.Copy(f, tr)
+			f.Close()
+		}
+	}
+	return nil
+}
+
+func Decompress(in io.Reader, out io.Writer) error {
+    d, err := zstd.NewReader(in)
+    if err != nil {
+        return err
+    }
+    defer d.Close()
+    
+    // Copy content...
+    _, err = io.Copy(out, d)
+    return err
+}
+
+
+func writeCGOFlags() error {
+	ldflags := fmt.Sprintf("-L${SRCDIR}/deps/opus/lib/%s -lopus", runtime.GOOS)
+	// Windows doesn't need -lm
+	if runtime.GOOS != "windows" {
+		ldflags += " -lm"
+	}
+
+	content := fmt.Sprintf(`// Code generated by build.go. DO NOT EDIT.
+
+//go:build static
+
+package opus
+
+/*
+#cgo CFLAGS: -I${SRCDIR}/deps/opus/include
+#cgo LDFLAGS: %s
+*/
+import "C"
+`, ldflags)
+
+	if err := os.WriteFile("cgo_flags_static.go", []byte(content), 0644); err != nil {
+		return err
+	}
+
+	fmt.Println("✓ Generated cgo_flags_static.go")
+	return nil
+}
+
+func downloadFile(url, filepath string) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP %s", resp.Status)
+	}
+
+	out, err := os.Create(filepath)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+
+func copyFile(src, dst string) error {
+	os.MkdirAll(filepath.Dir(dst), 0755)
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
+}
+
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, _ := filepath.Rel(src, path)
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+		return copyFile(path, dstPath)
+	})
+}
+
+func runCmd(dir, name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func commandExists(cmd string) bool {
+	_, err := exec.LookPath(cmd)
+	return err == nil
+}
+
+func fatal(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	os.Exit(1)
+}
+
+func addToSystemPath(dir string) error {
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("only supported on Windows")
+	}
+
+	// Use PowerShell to add to system PATH permanently
+	// This requires admin privileges
+	psScript := fmt.Sprintf(`
+		$path = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+		if ($path -notlike '*%s*') {
+			$newPath = $path + ';%s'
+			[Environment]::SetEnvironmentVariable('Path', $newPath, 'Machine')
+			Write-Output 'Added to PATH'
+		} else {
+			Write-Output 'Already in PATH'
+		}
+	`, dir, dir)
+
+	cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", psScript)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: %s", err, string(output))
+	}
+
+	return nil
+}
