@@ -13,7 +13,7 @@ import (
 )
 
 /*
-#cgo pkg-config: opusfile
+#cgo linux pkg-config: opusfile
 #include <opusfile.h>
 #include <stdint.h>
 #include <string.h>

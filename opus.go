@@ -5,9 +5,11 @@
 package opus
 
 /*
-// Link opus using pkg-config.
-#cgo pkg-config: opus
+#cgo windows CFLAGS: -IC:/opus/include/opus
+#cgo windows LDFLAGS: -LC:/opus/lib -lopus
+#cgo linux pkg-config: opus
 #include <opus.h>
+
 */
 import "C"
 

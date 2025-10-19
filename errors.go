@@ -9,7 +9,7 @@ import (
 )
 
 /*
-#cgo pkg-config: opus
+#cgo linux pkg-config: opus
 #include <opus.h>
 */
 import "C"

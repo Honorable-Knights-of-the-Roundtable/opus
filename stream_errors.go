@@ -7,7 +7,7 @@
 package opus
 
 /*
-#cgo pkg-config: opusfile
+#cgo linux pkg-config: opusfile
 #include <opusfile.h>
 */
 import "C"
