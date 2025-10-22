@@ -1,4 +1,4 @@
-// +build !nolibopusfile
+//go:build embedlibopusfile
 
 // Copyright © Go Opus Authors (see AUTHORS file)
 //
