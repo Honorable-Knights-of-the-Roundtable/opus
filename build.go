@@ -5,16 +5,16 @@ package main
 import (
 	"archive/tar"
 	"bufio"
-	"strings"
 	"compress/gzip"
 	"fmt"
+	"github.com/klauspost/compress/zstd"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"github.com/klauspost/compress/zstd"
+	"strings"
 )
 
 const (
@@ -38,9 +38,9 @@ func main() {
 
 func build() error {
 	if runtime.GOOS == "windows" {
-		return buildWindows() 
+		return buildWindows()
 	}
-	
+
 	if runtime.GOOS == "linux" {
 		return buildLinux()
 	}
@@ -279,41 +279,41 @@ func detectDistro() string {
 func extractTarZst(tarPath, dstDir string) error {
 	file, err := os.Open(tarPath)
 	if err != nil {
-			return err
+		return err
 	}
 	defer file.Close()
 
 	// Decompress zstd
 	d, err := zstd.NewReader(file)
 	if err != nil {
-			return err
+		return err
 	}
 	defer d.Close()
 
 	// Extract tar
 	tr := tar.NewReader(d)
 	for {
-			header, err := tr.Next()
-			if err == io.EOF {
-					break
-			}
-			if err != nil {
-					return err
-			}
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
 
-			target := filepath.Join(dstDir, header.Name)
-			switch header.Typeflag {
-			case tar.TypeDir:
-					os.MkdirAll(target, 0755)
-			case tar.TypeReg:
-					os.MkdirAll(filepath.Dir(target), 0755)
-					f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
-					if err != nil {
-							return err
-					}
-					io.Copy(f, tr)
-					f.Close()
+		target := filepath.Join(dstDir, header.Name)
+		switch header.Typeflag {
+		case tar.TypeDir:
+			os.MkdirAll(target, 0755)
+		case tar.TypeReg:
+			os.MkdirAll(filepath.Dir(target), 0755)
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+			if err != nil {
+				return err
 			}
+			io.Copy(f, tr)
+			f.Close()
+		}
 	}
 	return nil
 }
@@ -359,17 +359,16 @@ func extractTarGz(tarPath, dstDir string) error {
 }
 
 func Decompress(in io.Reader, out io.Writer) error {
-    d, err := zstd.NewReader(in)
-    if err != nil {
-        return err
-    }
-    defer d.Close()
-    
-    // Copy content...
-    _, err = io.Copy(out, d)
-    return err
-}
+	d, err := zstd.NewReader(in)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
 
+	// Copy content...
+	_, err = io.Copy(out, d)
+	return err
+}
 
 // func writeCGOFlags() error {
 // 	ldflags := fmt.Sprintf("-L${SRCDIR}/deps/opus/lib/%s -lopus", runtime.GOOS)
@@ -420,7 +419,6 @@ func downloadFile(url, filepath string) error {
 	_, err = io.Copy(out, resp.Body)
 	return err
 }
-
 
 func copyFile(src, dst string) error {
 	os.MkdirAll(filepath.Dir(dst), 0755)
