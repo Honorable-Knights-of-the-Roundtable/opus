@@ -10,7 +10,6 @@ import (
 )
 
 /*
-#cgo linux pkg-config: opus
 #include <opus.h>
 
 int

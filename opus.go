@@ -7,8 +7,8 @@ package opus
 /*
 #cgo windows CFLAGS: -IC:/opus/include/opus
 #cgo windows LDFLAGS: -LC:/opus/lib -l:libopus.a
-#cgo linux CFLAGS: -I/usr/include/opus
-#cgo linux LDFLAGS: -Wl,-Bstatic -lopus -Wl,-Bdynamic
+#cgo linux CFLAGS: -I${SRCDIR}/lib/include/opus
+#cgo linux LDFLAGS: -L${SRCDIR}/lib -l:libopus.a -lm
 #include <opus.h>
 
 */
