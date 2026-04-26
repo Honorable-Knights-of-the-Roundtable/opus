@@ -17,7 +17,7 @@ jobs:
       with:
         go-version: ${{ matrix.go-version }}
     - name: Install system dependencies
-      run: sudo apt-get install pkg-config libopus-dev libopusfile-dev moreutils
+      run: sudo apt-get install pkg-config moreutils
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Test
@@ -31,8 +31,8 @@ jobs:
       with:
         go-version: '1.25'
     - name: Install system dependencies
-      run: sudo apt-get install pkg-config libopus-dev
+      run: sudo apt-get install pkg-config libopusfile-dev
     - name: Checkout code
       uses: actions/checkout@v2
     - name: Test
-      run: go test -race -v ./...
+      run: go test -race -v -tags embedlibopusfile ./...
